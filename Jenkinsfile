@@ -9,9 +9,9 @@ pipeline {
     parameters {
         booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Ejecuta tests Maven')
         booleanParam(name: 'BUILD_DOCKER', defaultValue: true, description: 'Construye imagen Docker si existe Dockerfile')
-        booleanParam(name: 'PUSH_DOCKER', defaultValue: false, description: 'Publica la imagen Docker al registry configurado')
-        string(name: 'DOCKER_REGISTRY', defaultValue: '', description: 'Registry Docker opcional, por ejemplo ghcr.io/japvidal')
-        string(name: 'DOCKER_CREDENTIALS_ID', defaultValue: '', description: 'Credencial Jenkins para docker login')
+        booleanParam(name: 'PUSH_DOCKER', defaultValue: true, description: 'Publica la imagen Docker al registry configurado')
+        string(name: 'DOCKER_REGISTRY', defaultValue: 'ghcr.io/japvidal', description: 'Registry Docker opcional, por ejemplo ghcr.io/japvidal')
+        string(name: 'DOCKER_CREDENTIALS_ID', defaultValue: 'ghcr-japvidal', description: 'Credencial Jenkins para docker login')
     }
 
     environment {
