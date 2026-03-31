@@ -15,7 +15,6 @@ pipeline {
     }
 
     environment {
-        DOCKERFILE_PATH = ''
         IMAGE_NAME = 'tikitakas/zuul'
         IMAGE_TAG = ''
         IMAGE_REF = ''
@@ -60,24 +59,9 @@ pipeline {
             }
         }
 
-        stage('Detect Dockerfile') {
-            steps {
-                script {
-                    if (fileExists('Dockerfile')) {
-                        env.DOCKERFILE_PATH = 'Dockerfile'
-                    } else {
-                        env.DOCKERFILE_PATH = sh(
-                            script: 'ls *.Dockerfile 2>/dev/null | head -n 1 || true',
-                            returnStdout: true
-                        ).trim()
-                    }
-                }
-            }
-        }
-
         stage('Build Docker Image') {
             when {
-                expression { return params.BUILD_DOCKER && env.DOCKERFILE_PATH?.trim() }
+                expression { return params.BUILD_DOCKER }
             }
             steps {
                 script {
@@ -86,29 +70,25 @@ pipeline {
                         registry = 'ghcr.io/japvidal'
                     }
                     def imageTag = (env.BRANCH_NAME ?: "build-${env.BUILD_NUMBER}").replaceAll('[^A-Za-z0-9_.-]', '-')
+                    def imageRef = "${registry}/tikitakas/zuul:${imageTag}"
                     env.IMAGE_TAG = imageTag
-                    env.IMAGE_REF = "${registry}/tikitakas/zuul:${imageTag}"
-                    echo "IMAGE_REF=${env.IMAGE_REF}"
-                    sh "docker build -f ${env.DOCKERFILE_PATH} -t ${env.IMAGE_REF} ."
+                    env.IMAGE_REF = imageRef
+                    echo "IMAGE_REF=${imageRef}"
+                    writeFile file: '.docker-image-ref', text: "${imageRef}\n"
+                    sh "docker build -f zuul.Dockerfile -t ${imageRef} ."
                 }
             }
         }
 
         stage('Push Docker Image') {
             when {
-                expression { return params.BUILD_DOCKER && params.PUSH_DOCKER && env.DOCKERFILE_PATH?.trim() }
+                expression { return params.BUILD_DOCKER && params.PUSH_DOCKER }
             }
             steps {
                 script {
-                    if (!env.IMAGE_REF?.trim()) {
-                        def registry = params.DOCKER_REGISTRY?.trim()
-                        if (!registry) {
-                            registry = 'ghcr.io/japvidal'
-                        }
-                        def imageTag = (env.BRANCH_NAME ?: "build-${env.BUILD_NUMBER}").replaceAll('[^A-Za-z0-9_.-]', '-')
-                        env.IMAGE_TAG = imageTag
-                        env.IMAGE_REF = "${registry}/tikitakas/zuul:${imageTag}"
-                    }
+                    def imageRef = readFile('.docker-image-ref').trim()
+                    env.IMAGE_REF = imageRef
+                    echo "PUSH_IMAGE_REF=${imageRef}"
                     if (params.DOCKER_CREDENTIALS_ID?.trim()) {
                         withCredentials([
                             usernamePassword(
@@ -117,18 +97,18 @@ pipeline {
                                 passwordVariable: 'DOCKER_PASSWORD'
                             )
                         ]) {
-                            sh '''
+                            sh """
                                 set +x
-                                if [ -n "${DOCKER_REGISTRY}" ]; then
-                                  echo "${DOCKER_PASSWORD}" | docker login "${DOCKER_REGISTRY}" -u "${DOCKER_USERNAME}" --password-stdin
+                                if [ -n "${params.DOCKER_REGISTRY?.trim()}" ]; then
+                                  echo "\${DOCKER_PASSWORD}" | docker login "${params.DOCKER_REGISTRY?.trim()}" -u "\${DOCKER_USERNAME}" --password-stdin
                                 else
-                                  echo "${DOCKER_PASSWORD}" | docker login ghcr.io/japvidal -u "${DOCKER_USERNAME}" --password-stdin
+                                  echo "\${DOCKER_PASSWORD}" | docker login ghcr.io/japvidal -u "\${DOCKER_USERNAME}" --password-stdin
                                 fi
-                                docker push "${IMAGE_REF}"
-                            '''
+                                docker push "${imageRef}"
+                            """
                         }
                     } else {
-                        sh 'docker push "${IMAGE_REF}"'
+                        sh "docker push ${imageRef}"
                     }
                 }
             }
